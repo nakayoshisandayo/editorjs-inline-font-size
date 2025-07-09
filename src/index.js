@@ -1,11 +1,12 @@
+import fontSizeIcon from './font-size.svg';
 
 require('./index.css').toString();
-
 class FontSizeTool {
   static title = 'Font Size';
+  icon = fontSizeIcon;
   isDropDownOpen = false;
   togglingCallback = null;
-  emptyString = '&nbsp;&nbsp';
+  emptyString = '&nbsp;'; //未選択時の表示
   fontSizeDropDown = 'font-size-dropdown';
 
   static get sanitize() {
@@ -16,31 +17,42 @@ class FontSizeTool {
       },
     };
   }
+
   static get isInline() {
     return true;
   }
-  commandName = 'fontSize';
 
+  commandName = 'fontSize';
   CSS = {
     button: 'ce-inline-tool',
     buttonActive: 'ce-font-size-tool--active',
     buttonModifier: 'ce-inline-tool--font',
-
   }
   nodes = {
     button: undefined
   }
   selectedFontSize = null;
-
   selectionList = undefined;
-
   buttonWrapperText = undefined;
-
   createSvg = undefined;
+  fontSizeOptions = [];
+  // defaultFontSizeOptions = [
+  //   { label: '10', value: '1' },
+  //   { label: '13', value: '2' },
+  //   { label: '16', value: '3' },
+  //   { label: '18', value: '4' },
+  //   { label: '24', value: '5' },
+  //   { label: '32', value: '6' },
+  //   { label: '48', value: '7' }
+  // ];
+  defaultFontSizeOptions = ['10', '12', '14', '16', '18', '24', '32', '48'];
+
+  constructor({config}) {
+    this.fontSizeOptions = config?.fontSizeList || this.defaultFontSizeOptions;
+  }
 
   make(tagName, classNames = null) {
     const el = document.createElement(tagName);
-
     if (Array.isArray(classNames)) {
       el.classList.add(...classNames);
     } else if (classNames) {
@@ -54,46 +66,51 @@ class FontSizeTool {
     this.nodes.button.type = 'button';
     this.nodes.button.setAttribute('id', 'fontSizeBtn');
     this.getFontSizeForButton();
-    this.createSvg = this.svg('toggler-down', 13, 13);
-    this.nodes.button.appendChild(this.createSvg);
   }
+
   getFontSizeForButton() {
     this.buttonWrapperText = this.make('div', 'button-wrapper-text');
     const displaySelectedFontSize = this.make('div');
     displaySelectedFontSize.setAttribute('id', this.fontSizeDropDown)
-    displaySelectedFontSize.innerHTML = this.emptyString;
+    displaySelectedFontSize.innerHTML = this.icon;
     this.buttonWrapperText.append(displaySelectedFontSize);
     this.nodes.button.append(this.buttonWrapperText);
   }
 
   addFontSizeOptions() {
-    const fontSizeList = [
-      { label: '10', value: '1' },
-      { label: '13', value: '2' },
-      { label: '16', value: '3' },
-      { label: '18', value: '4' },
-      { label: '24', value: '5' },
-      { label: '32', value: '6' },
-      { label: '48', value: '7' }
-    ];
     this.selectionList = this.make('div', 'selectionList');
     const selectionListWrapper = this.make('div', 'selection-list-wrapper');
+    const currentFontSizeEl = document.getElementById(this.fontSizeDropDown);
 
-    for (const fontSize of fontSizeList) {
+    /**
+     * mousedownイベントのデフォルト動作を無効にし、
+     * エディタの選択範囲が解除されるのを防ぎます。
+     */
+    this.selectionList.addEventListener('mousedown', (event) => event.preventDefault());
+
+    for (const fontSize of this.fontSizeOptions) {
       const option = this.make('div');
-      option.setAttribute('value', fontSize.value);
-      option.setAttribute('id', fontSize.value);
+      option.setAttribute('value', fontSize);
+      option.setAttribute('id', fontSize);
       option.classList.add('selection-list-option');
-      if ((document.getElementById(this.fontSizeDropDown).innerHTML === fontSize.label) || (this.selectedFontSize === fontSize.value)) {
+      if ((currentFontSizeEl && currentFontSizeEl.innerHTML === fontSize) || (this.selectedFontSize === fontSize)) {
         option.classList.add('selection-list-option-active');
       }
-      option.innerHTML = fontSize.label;
+      option.innerHTML = fontSize;
       selectionListWrapper.append(option);
     }
     this.selectionList.append(selectionListWrapper);
-    this.nodes.button.append(this.selectionList);
-    this.selectionList.addEventListener('click', this.toggleFontSizeSelector);
 
+    // document.bodyにリストを追加して、ボタンの外に表示します
+    document.body.appendChild(this.selectionList);
+
+    // ボタンの真下にリストを配置します
+    const buttonRect = this.nodes.button.getBoundingClientRect();
+    this.selectionList.style.position = 'absolute';
+    this.selectionList.style.top = `${buttonRect.bottom + window.scrollY + 5}px`; // 5pxの間隔を空けます
+    this.selectionList.style.left = `${buttonRect.left + window.scrollX}px`;
+
+    this.selectionList.addEventListener('click', this.toggleFontSizeSelector);
     setTimeout(() => {
       if (typeof this.togglingCallback === 'function') {
         this.togglingCallback(true);
@@ -103,7 +120,56 @@ class FontSizeTool {
 
   toggleFontSizeSelector = (event) => {
     this.selectedFontSize = event.target.id;
-    this.toggle();
+    this.toggle(); // ドロップダウンを閉じます
+
+    if (!this.selectedFontSize) return;
+
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+
+      // スタイルを適用するために新しいメソッドを呼び出します
+      this.applyStyle(range);
+    }
+  }
+
+  surround(range) {
+    // Editor.jsがこのメソッドを呼び出すときも、同じスタイル適用ロジックを使用します
+    if (!this.selectedFontSize) {
+      return;
+    }
+    this.applyStyle(range);
+  }
+
+  applyStyle(range) {
+    const selectedFontSizeOption = this.fontSizeOptions.find(
+        fontSize => fontSize === this.selectedFontSize
+    );
+
+    if (selectedFontSizeOption) {
+      if (range.collapsed) {
+        return;
+      }
+
+      const fontSizeValue = selectedFontSizeOption;
+      const lineHeightValue = Math.round(parseInt(fontSizeValue) * 1.5);
+
+      const fontNode = document.createElement('span');
+      fontNode.style.fontSize = `${fontSizeValue}px`;
+      fontNode.style.lineHeight = `${lineHeightValue}px`;
+
+      try {
+        // range.extractContents() を使うことで、太字などの既存の書式を維持したままラップできます
+        const selectedContent = range.extractContents();
+        fontNode.appendChild(selectedContent);
+        range.insertNode(fontNode);
+
+        // ボタンに表示されているフォントサイズを更新します
+        this.replaceFontSizeInWrapper(fontSizeValue);
+      } catch (e) {
+        console.error('フォントサイズの適用に失敗しました:', e);
+      }
+    }
   }
 
   removeFontSizeOptions() {
@@ -123,12 +189,12 @@ class FontSizeTool {
   }
 
   toggleDropDown = ($event) => {
-    if ((($event.target).id === this.fontSizeDropDown || $event.target.parentNode.id === 'fontSizeBtn' || $event.target.id === 'fontSizeBtn')) {
+    if (event.target.closest('#fontSizeBtn')) {
       this.toggle((toolbarOpened) => {
         if (toolbarOpened) {
           this.isDropDownOpen = true;
         }
-      })
+      });
     }
   }
 
@@ -143,54 +209,47 @@ class FontSizeTool {
     }
   }
 
-  surround(range) {
-    if (this.selectedFontSize) {
-      document.execCommand('fontSize', false, this.selectedFontSize);
-    }
-  }
-
   getComputedFontStyle(node) {
     return window.getComputedStyle(node.parentElement, null).getPropertyValue('font-size');
   };
-  
+
   checkState(selection) {
-    const isActive = document.queryCommandState('fontSize');
-    let anchoredElementFontSize = this.getComputedFontStyle(selection.anchorNode);
-    const focusedElementFontSize = this.getComputedFontStyle(selection.focusNode);
-    if (anchoredElementFontSize === focusedElementFontSize) {
-      anchoredElementFontSize = anchoredElementFontSize.slice(0, anchoredElementFontSize.indexOf('p'));
-      const elementContainsDecimalValue = anchoredElementFontSize.indexOf('.');
-      if (elementContainsDecimalValue !== -1) {
-        anchoredElementFontSize = anchoredElementFontSize.slice(0, anchoredElementFontSize.indexOf('.'));
+    const parentSpan = selection.anchorNode.parentElement;
+    let isActive = false;
+
+    // 親要素がこのツールで作成したSPANか（font-sizeスタイルを持っているか）をチェックします
+    if (parentSpan && parentSpan.tagName === 'SPAN' && parentSpan.style.fontSize) {
+      const currentSize = parseInt(parentSpan.style.fontSize);
+      // そのフォントサイズがオプションに存在するか確認します
+      if (!isNaN(currentSize) && this.fontSizeOptions.includes(String(currentSize))) {
+        // 存在すれば、ボタンの表示をその数値に更新し、アクティブ状態にします
+        this.replaceFontSizeInWrapper(String(currentSize));
+        isActive = true;
+      } else {
+        // 不明なフォントサイズの場合はアイコン表示に戻します
+        this.replaceFontSizeInWrapper(this.icon);
       }
-      this.replaceFontSizeInWrapper(anchoredElementFontSize);
+    } else {
+      // スタイルが適用されていないテキストの場合はアイコン表示に戻します
+      this.replaceFontSizeInWrapper(this.icon);
     }
-    else {
-      const emptyWrapper = this.emptyString;
-      this.replaceFontSizeInWrapper(emptyWrapper);
-    }
+
+    // ツールバーボタンのアクティブ状態を返します
     return isActive;
   }
 
   replaceFontSizeInWrapper(size) {
     const displaySelectedFontSize = document.getElementById(this.fontSizeDropDown);
-    displaySelectedFontSize.innerHTML = size;
+    if (displaySelectedFontSize) {
+      displaySelectedFontSize.innerHTML = size;
+    }
   }
 
   clear() {
     this.toggle();
     this.selectedFontSize = null;
-  }
-
-  svg(name, width = 14, height = 14) {
-    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-
-    icon.classList.add('icon', 'icon--' + name);
-    icon.setAttribute('width', width + 'px');
-    icon.setAttribute('height', height + 'px');
-    icon.innerHTML = `<use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#${name}"></use>`;
-
-    return icon;
+    // ツールをクリアした際は、表示をアイコンに戻します
+    this.replaceFontSizeInWrapper(this.icon);
   }
 }
-module.exports = FontSizeTool
+export default FontSizeTool;

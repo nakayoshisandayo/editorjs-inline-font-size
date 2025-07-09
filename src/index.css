@@ -31,3 +31,30 @@
         } 
     }
 }
+
+.selectionList {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #e8e8eb;
+    box-shadow: 0 3px 15px -3px rgba(13, 20, 33, 0.13);
+    border-radius: 6px;
+    padding: 6px 0;
+    z-index: 1000; /* 他の要素より手前に表示 */
+    min-width: 100px;
+    box-sizing: border-box;
+}
+
+.selection-list-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px; /* 見やすいようにフォントサイズを調整 */
+}
+
+.selection-list-option:hover {
+    background-color: #f2f2f2;
+}
+
+.selection-list-option-active {
+    background-color: #eef5ff;
+    color: #388ae5;
+}
