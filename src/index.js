@@ -141,36 +141,90 @@ class FontSizeTool {
     this.applyStyle(range);
   }
 
+  /**
+   * 指定されたノードとその子孫から、font-sizeスタイルを持つSPANをアンラップ（解除）します。
+   * @param {Node} node - 処理を開始するノード (通常はDocumentFragment)
+   */
+  unwrapFontSizeSpans(node) {
+    // node内にある、style属性に"font-size"を含むspanをすべて取得します。
+    const spans = node.querySelectorAll('span[style*="font-size"]');
+    spans.forEach(span => {
+      const parent = span.parentNode;
+      if (parent) {
+        // spanが持っている子ノードを、すべてspan自体の直前に移動させます。
+        while (span.firstChild) {
+          parent.insertBefore(span.firstChild, span);
+        }
+        // 子ノードがすべて移動し、空になったspanをDOMから削除します。
+        parent.removeChild(span);
+      }
+    });
+  }
+
+  /**
+   * 選択範囲にフォントサイズスタイルを適用します。
+   * @param {Range} range - スタイルを適用する選択範囲
+   */
   applyStyle(range) {
     const selectedFontSizeOption = this.fontSizeOptions.find(
         fontSize => fontSize === this.selectedFontSize
     );
 
-    if (selectedFontSizeOption) {
-      if (range.collapsed) {
-        return;
-      }
+    if (!selectedFontSizeOption || range.collapsed) {
+      return;
+    }
 
-      const fontSizeValue = selectedFontSizeOption;
-      const lineHeightValue = Math.round(parseInt(fontSizeValue) * 1.5);
+    const fontSizeValue = selectedFontSizeOption;
+    const lineHeightValue = Math.round(parseInt(fontSizeValue) * 1.5);
 
+    // 選択範囲の共通祖先ノードを取得します
+    let commonAncestor = range.commonAncestorContainer;
+
+    // 共通祖先がテキストノードの場合、その親要素を対象とします
+    if (commonAncestor.nodeType === Node.TEXT_NODE) {
+      commonAncestor = commonAncestor.parentElement;
+    }
+
+    // 選択範囲が既存のフォントサイズspanと完全に一致するかチェックします
+    const existingSpan = commonAncestor.closest('span[style*="font-size"]');
+
+    // ケース1: 既存のspanがあり、その内容全体が選択されている場合
+    if (existingSpan && existingSpan.textContent.trim() === range.toString().trim()) {
+      // spanがネストするのを防ぐため、既存のspanのスタイルを直接更新します
+      existingSpan.style.fontSize = `${fontSizeValue}px`;
+      existingSpan.style.lineHeight = `${lineHeightValue}px`;
+
+      this.replaceFontSizeInWrapper(fontSizeValue);
+      return; // これで処理完了
+    }
+
+    // ケース2: 新規にスタイルを適用、または部分的に適用する場合
+    try {
+      // 選択範囲のコンテンツを抽出します。
+      const selectedContent = range.extractContents();
+
+      // 抽出したコンテンツ内に、もし古いフォントサイズのspanがあれば解除します
+      this.unwrapFontSizeSpans(selectedContent);
+
+      // 新しいフォントサイズのためのspanを作成します
       const fontNode = document.createElement('span');
       fontNode.style.fontSize = `${fontSizeValue}px`;
       fontNode.style.lineHeight = `${lineHeightValue}px`;
 
-      try {
-        // range.extractContents() を使うことで、太字などの既存の書式を維持したままラップできます
-        const selectedContent = range.extractContents();
-        fontNode.appendChild(selectedContent);
-        range.insertNode(fontNode);
+      // スタイルを解除したコンテンツを新しいspanで囲みます
+      fontNode.appendChild(selectedContent);
 
-        // ボタンに表示されているフォントサイズを更新します
-        this.replaceFontSizeInWrapper(fontSizeValue);
-      } catch (e) {
-        console.error('フォントサイズの適用に失敗しました:', e);
-      }
+      // 元の選択範囲に、新しいspanを挿入します
+      range.insertNode(fontNode);
+
+      // ボタンの表示を更新します
+      this.replaceFontSizeInWrapper(fontSizeValue);
+
+    } catch (e) {
+      console.error('フォントサイズの適用に失敗しました:', e);
     }
   }
+
 
   removeFontSizeOptions() {
     if (this.selectionList) {
